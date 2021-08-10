@@ -18,4 +18,4 @@ if __name__ == "__main__":
     # JobList.PrintRecentHistory()
     curr = JobList.Results()
     print(curr)
-    # JobList.StoreCurrResults()
+    JobList.StoreCurrResults()

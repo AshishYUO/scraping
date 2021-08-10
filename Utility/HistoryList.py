@@ -10,7 +10,6 @@ class Node:
         self.NextData = None
         self.PreviousData = None
 
-
 class HistoryList:
     """
     History List stores the history of n previous searches, defaults to 10
@@ -30,7 +29,6 @@ class HistoryList:
         :param data: json/dictionary
         :returns this
         """
-
         # trivial case: if list is empty
         if self.Head == None and self.Tail == None:
             self.Head = self.Tail = Node(data)
@@ -39,10 +37,10 @@ class HistoryList:
             # if size is at the limit, remove the Head and set the next node as 
             # new Head
             if self.Size == 10:
-                tempReference = self.Head
+                TempReference = self.Head
                 self.Head = self.Head.NextData
                 self.Head.PreviousData = None
-                del tempReference
+                del TempReference
                 self.Size -= 1
             # add to the list
             NewData = Node(data)
@@ -57,25 +55,27 @@ class HistoryList:
         """
         String representation of the HistoryList
         """
-        traverse = self.Tail
+        Traverse = self.Tail
         index = 0
         display = "Recent History Size: {}\n".format(self.Size)
-        while traverse is not None:
-            display += '{}:\n:::\n[\n{}\n]\n:::\n'.format(index, traverse.data.__str__())
-            traverse = traverse.PreviousData
+        while Traverse is not None:
+            display += '{}:\n:::\n[\n{}\n]\n:::\n'.format(index, Traverse.data.__str__())
+            Traverse = Traverse.PreviousData
             index += 1
         return display
 
     def RetrieveRecentNthQuery(self, n):
         """
         Return recently nth query, if exists in the list, else returns None
-        """ 
+        """
+        if n < 0:
+            raise TypeError('Invalid nth query, n cannot be negative: found {}'.format(n))
         if n > self.Size:
             print('Recent nth query value n: {} exceeds history size: {}'.format(n, self.Size))
             return None
         else:
-            traverse = self.Tail
+            Traverse = self.Tail
             n = n - 1
             while n > 0:
-                traverse = traverse.NextData
-            return traverse.data
+                Traverse = Traverse.NextData
+            return Traverse.Data

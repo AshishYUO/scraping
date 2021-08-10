@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import requests
 import json
-from ReaderImplementation.Reader import Reader
+from ReaderImplementation.JobReader import JobReader
 from Utility.HistoryList import HistoryList
 from TaskExecutor.TaskExecutor import SendParallelRequest
 import pandas as pd
@@ -16,10 +16,18 @@ class JobListing:
         self.HistoryList = HistoryList(HistorySize)
         self.readers = {}
         if "LinkedIn" in website:
-            self.readers["LinkedIn"] = Reader('LinkedIn')
+            self.readers["LinkedIn"] = JobReader('LinkedIn')
         if "Indeed" in website:
-            self.readers["Indeed"] = Reader('Indeed')
+            self.readers["Indeed"] = JobReader('Indeed')
         self.QueryResults = None
+
+    def CreateSession(WebsiteParams):
+        """
+        To create a session for personalized session.
+        :param WebsiteParams parameter for website (to be read thorugh a file
+        for easier)
+        """
+        pass
 
     def SendRequests(self, KeywordParams):
         """
@@ -28,7 +36,7 @@ class JobListing:
         :returns Details from all the available list
         """
         if isinstance(KeywordParams, dict) == False:
-            print('keyWord not an instance of dictionary')
+            raise TypeError('KeywordParams not an instance of dictionary')
         else:
             start = time()
             JobDetails = {}
@@ -56,14 +64,20 @@ class JobListing:
             print('Finished.\nTime taken for scraping: {}s'.format(end - start))
             return JobDetails
 
+    def SetNewData(self, Platform, UserAttribute, TagName, TagClass=None, DOMAttr=None):
+        """
+        Sets custom data to retrieve from the user.
+        """
+        self.Reader[Platform].SetTagsFromUser(UserAttribute, TagName, TagClass, DOMAttr)
+
+
     def __Send__(self, Params):
         """
         Internal method to send the request to required URL parameter
         """
         Reader, QueryURL = Params
         request = requests.get(QueryURL)
-        response = str(request.content)
-        JobDetails = Reader.ListJobContents(response)
+        JobDetails = Reader.ListContents(request.content)
         return JobDetails
 
     def FileHandle(self, mode, saveAs):
@@ -90,13 +104,7 @@ class JobListing:
         """
         Creates a new file and stores the result in a new file
         """
-        self.FileHandle('w', saveAs)
-
-    def AppendCurrResults(self, saveAs='CurrentSearch.json'):
-        """
-        Appends to an existing file, creates new one if not exists
-        """
-        self.FileHandle('a+', saveAs)        
+        self.FileHandle('w', saveAs)   
 
     def PrintRecentHistory(self):
         """

@@ -18,13 +18,13 @@ class TagException(Exception):
     """
     pass
 
-class Reader(IReader):
+class JobReader(IReader):
     """
     An attempt to generalize Job post retrieving, according to the user requests.
     By default, we are using LinkedIn as a Job Scraping website.
     To decide from which website to scrape, you need to declare constants, as the
     reader is totally dependent on the constants. If classes are not known or they are empty,
-    you can put them as None.+
+    you can put them as None.
     For reference, you can see ./Constants/LinkedInReaderConstants.py
     """
     def __init__(self, Platform=None):
@@ -36,7 +36,7 @@ class Reader(IReader):
         else:
             self.Constants = importlib.import_module('ReaderImplementation.Constants.LinkedInReaderConstants')
 
-        self.ToDisplay = set(['CompanyName', 'JobTitle', 'JobLocation', 'TimePosted'])
+        self.ToDisplay = ['JobLink', 'CompanyName', 'JobTitle', 'JobLocation', 'TimePosted']
 
         self.DomainName = self.Constants.DOMAIN_NAME
         self.SearchURL = self.Constants.JOB_SEARCH_URL
@@ -47,6 +47,9 @@ class Reader(IReader):
                             "DatePosted":      self.Constants.JOB_SEARCH_TIME_POSTED, 
                             "NumberOfPages":   self.Constants.JOB_SEARCH_PAGE_KEY
                             }
+        self.UserTags = {}
+        self.UserClass = {}
+        self.UserAttr = {}
         self.QueryKeyLen = len(self.QueryParams)
         self.PageMultiplier = self.Constants.JOB_SEARCH_PAGE_MULTIPLIER
 
@@ -66,11 +69,25 @@ class Reader(IReader):
                 print('Key {} not found in list of keys'.format(QueryKey))
             elif self.QueryParams[QueryKey] is not None:
                 if QueryKey == 'NumberOfPages':
-                    QueryValue = PageNumber*self.PageMultiplier
+                    QueryValue = PageNumber * self.PageMultiplier
 
                 QueryURL += '{}={}'.format(self.QueryParams[QueryKey], QueryValue)
                 QueryURL += '&'
         return QueryURL
+
+    def SetTagsFromUser(self, UserAttr, TagName, TagClass=None, DOMAttr=None):
+        """
+        Set user according to the user observed tags, class, and retrieve
+        attribute/DOM inner text
+        :param UserAttr title to retrieve
+        :param TagName Tag for the DOM element from Job Post
+        :param TagClass ClassName for specific searching
+        :param DOMAttr DOM attr that will be returned on selecting the UserAttr
+        :returns None
+        """
+        self.UserTags[UserAttr] = TagName
+        self.UserClass[UserAttr] = TagClass
+        self.UserAttr[UserAttr] = DOMAttr
 
     def GetLinkOfJobPostFromJobPostDOM(self, JobPostDOM):
         """
@@ -82,9 +99,10 @@ class Reader(IReader):
         LinkDOM = None
         if JobPostDOM is not None:
             ClassName = JobPostDOM['class'] if JobPostDOM.has_attr('class') else None
+
             if ClassName is not None and self.Constants.RESULT_LINK_CLASS is not None:
                 if JobPostDOM.name == self.Constants.RESULT_LINK_TAG and self.Constants.RESULT_LINK_CLASS in ClassName:
-                    return JobPostDOM['href']
+                    return JobPostDOM['href'].strip()
         
         return self.GetDataFromJobPostDOM(JobPostDOM, 
                                           self.Constants.RESULT_LINK_TAG, 
@@ -130,12 +148,35 @@ class Reader(IReader):
                                           self.Constants.RESULT_LOCATION_TAG, 
                                           self.Constants.RESULT_LOCATION_CLASS, 
                                           DOMAttr)
-        
+    
+    def GetUserDataFromJobPostDOM(self, Attr, JobPostDOM, DOMAttr=None):
+        """
+        Get data defined programatically by user
+        :param self instance of the object
+        :param Attr attribute to retrieve
+        :param JobPostDOM internal parsing of DOM
+        :param DOMAttr attribute to retrieve, defaults to None
+        :returns Data if Attr is defined in UserAttr and it exists in DOM, else 
+        returns None
+        """
+        UserTags = self.UserTags[Attr] if Attr in UserTags else None
+        UserClass = self.UserClass[Attr] if Attr in UserTags else None
+        UserAttr = self.UserAttr[Attr] if Attr in UserTags else DOMAttr
+        return self.GetDataFromJobPostDOM(JobPostDOM,
+                                          UserTag,
+                                          UserClass,
+                                          UserAttr)
 
     def GetDataFromJobPostDOM(self, JobPostDOM, CustomDataDOMTag, CustomDataDOMClass=None, CustomDataDOMAttribute=None):
         """
-        Get custom data as per requested by the user, given the tag
-        from the company DOM
+        Get custom data as per requested by the user, given the JobPostDOM and
+        Tag to retrieve
+        :param JobPostDOM main DOM element
+        :param CustomDataDOMTag Tag to be searched
+        :param CustomDataDOMClass class associated with the tag in DOM element, defaults to None
+        :param CustomDataDOMAttribute attribute to be returned, defaults to None
+        :returns Attribute of the DOM if CustomDataDOMAttribute is defined, else returns inner text for valid
+        tag and class value
         """
         JobCustomData = None
         if isinstance(CustomDataDOMTag, str):
@@ -146,35 +187,53 @@ class Reader(IReader):
             else:
                 raise TypeError('CustomDataDOMClass should either\
                                 be none or str, not' + type(CustomDataDOMClass))
+
             if JobCustomData is not None:
                 if isinstance(CustomDataDOMAttribute, str):
-                    return JobCustomData[CustomDataDOMAttribute]
+                    return JobCustomData[CustomDataDOMAttribute].strip()
                 elif CustomDataDOMAttribute is None:
-                    return JobCustomData.text
+                    return JobCustomData.text.strip()
                 else:
                     raise TypeError('CustomDataDOMAttribute should either\
                                      be none (for innerText) or str, not' + type(CustomDataDOMAttribute))
         return None
 
-    def ListJobContents(self, Content, ToDisplay=None):
+    def Columns(self, ToDisplay):
+        """
+        Set the columns
+        """
+        columns = list(self.ToDisplay)
+        if ToDisplay is not None:
+            ToDisplay = set(ToDisplay)
+            for Attr in ToDisplay:
+                if Attr not in self.ToDisplay:
+                    ToDisplay.remove(Attr)
+
+            columns += list(ToDisplay)
+
+        return columns
+
+    def ListContents(self, Content, ToDisplay=None):
         """
         Returns the list of Job list to the Listing
         To prepare: Custom data as per the user requests.
         """
-        Soup = BeautifulSoup(Content.replace('\\n', '').replace('  ', ''), features="html.parser")
+        ToDisplay = self.Columns(ToDisplay)
+
+        Soup = BeautifulSoup(Content, features="html.parser", from_encoding="UTF-8")
         JobPostResult = Soup.find(self.Constants.RESULT_LIST_TAG, class_=self.Constants.RESULT_LIST_CLASS)
 
         if JobPostResult is not None:
             AllJobPostDOMList = JobPostResult.findAll(self.Constants.RESULT_PARENT_TAG)
+
             if AllJobPostDOMList is not None:
                 return self.ListAllAvailableCompaniesInfo(AllJobPostDOMList, ToDisplay)
             else:
                 raise DOMNotFoundException('No DOM element related to search list found')
-        return None
-        # else:
-        #     raise DOMNotFoundException('No DOM element related to search result found')
 
-    def ListAllAvailableCompaniesInfo(self, AllJobPostDOMList, ToDisplay):
+        return pd.DataFrame(columns=ToDisplay)
+
+    def ListAllAvailableCompaniesInfo(self, AllJobPostDOMList, ToDisplay=None):
         """
         Prepares and returns the link associated to the Job details.
         :param AllJobPostDOMList List of all DOM denoting the Job post.
@@ -182,13 +241,7 @@ class Reader(IReader):
         """
         # To be replaced with dataframe or np array.
         # Useful for people performing data analytics
-        columns = ['JobLink', 'JobTitle', 'CompanyName', 'TimePosted', 'JobLocation']
-        dataframe = pd.DataFrame(columns=columns)
-        if ToDisplay is not None:
-            ToDisplay = set(ToDisplay)
-            for Attr in ToDisplay:
-                if Attr not in self.ToDisplay:
-                    ToDisplay.remove(Attr)
+        dataframe = pd.DataFrame(columns=ToDisplay)
 
         JobDictionary = {}
         index = 1
@@ -200,13 +253,20 @@ class Reader(IReader):
                 Link = self.DomainName + Link
             # to check whether if the link has relative path or absolute path
             if Link is not None:
-                # JobDictionary[Link] = {}
                 Dictionary =  {
-                        'JobLink':Link,
+                        'JobLink': Link,
                         'JobTitle': self.GetJobTitleFromJobPostDOM(JobPostDOM), 
                         'CompanyName': self.GetCompanyFromJobPostDOM(JobPostDOM), 
                         'TimePosted': self.GetPostedTimeFromJobPostDOM(JobPostDOM),
                         'JobLocation': self.GetJobLocationFromJobPostDOM(JobPostDOM)}
+
+                for DisplayAttr in ToDisplay:
+                    if DisplayAttr not in self.ToDisplay:
+                        Dictionary[DisplayAttr] = self.GetDataFromJobPostDOM(JobPostDOM,
+                                                                             self.UserTags[DisplayAttr],
+                                                                             self.UserClass[DisplayAttr],
+                                                                             self.UserAttr[DisplayAttr])
+
                 dataframe = dataframe.append(Dictionary, ignore_index=True)
 
         return dataframe

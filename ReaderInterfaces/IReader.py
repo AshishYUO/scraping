@@ -13,7 +13,7 @@ class IReader(ABC):
 		raise NotImplementedError
 		
 	@abstractmethod
-	def ListJobContents(self, Content, ToDisplay):
+	def ListContents(self, Content, ToDisplay):
 		"""
 		Constructs the result for the pages. To be implemented by Job Reader
 		:param Content: HTML content to be parsed for Job searching
