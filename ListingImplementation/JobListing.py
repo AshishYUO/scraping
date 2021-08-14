@@ -39,29 +39,27 @@ class JobListing:
             raise TypeError('KeywordParams not an instance of dictionary')
         else:
             start = time()
-            JobDetails = {}
-
             URLParamList = []
-            for ReaderNames in KeywordParams:
+            for ReaderNames, Queries in KeywordParams.items():
                 if ReaderNames in self.readers:
                     reader = self.readers[ReaderNames]
-                    parameters = KeywordParams[ReaderNames]
-                    TotalPages = parameters['NumberOfPages'] if 'NumberOfPages' in parameters else 1
-                    for PageNumber in range(TotalPages):
-                        QueryURL = reader.ConstructQueryURL(parameters, PageNumber)
-                        Tuple = (reader, QueryURL)
-                        URLParamList.append(Tuple)
-                        print(QueryURL)
+                    for query in Queries:
+                        TotalPages = query['NumberOfPages'] if 'NumberOfPages' in query else 1
+                        # Generate argument for the JobReader as tuples
+                        URLParamList += [(reader, reader.ConstructQueryURL(query, PageNumber))
+                                         for PageNumber in range(TotalPages)]
                 else:
-                    print('No reader found for {}'.format(ReaderNames))   
+                    print('No reader found for {}'.format(ReaderNames))
 
-            JobDetails = SendParallelRequest(self.__Send__, URLParamList)
-            JobDetails.reset_index(drop=True)
-            self.QueryResults = JobDetails
-            self.HistoryList += JobDetails
-            end = time()
+            print(URLParamList)
 
-            print('Finished.\nTime taken for scraping: {}s'.format(end - start))
+            if len(URLParamList) > 0:
+                JobDetails = SendParallelRequest(self.__Send__, URLParamList)
+                self.QueryResults = JobDetails
+                self.HistoryList += ([URLTuple[1] for URLTuple in URLParamList], JobDetails)
+                end = time()
+                print('Finished.\nTime taken for scraping: {}s'.format(end - start))
+
             return JobDetails
 
     def SetNewData(self, Platform, UserAttribute, TagName, TagClass=None, DOMAttr=None):
