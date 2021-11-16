@@ -58,7 +58,7 @@ class JobListing:
                 self.QueryResults = JobDetails
                 self.HistoryList += ([URLTuple[1] for URLTuple in URLParamList], JobDetails)
                 end = time()
-                print('Finished.\nTime taken for scraping: {}s'.format(end - start))
+                print('Finished.\nTime taken for scraping: %fs' % (end - start))
 
             return JobDetails
 

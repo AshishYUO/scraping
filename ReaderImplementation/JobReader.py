@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 from bs4 import BeautifulSoup
-import json
 import importlib
+import re
 from ReaderInterfaces.IReader import IReader
 from ReaderImplementation.Constants.LinkedInReaderConstants import *
-import pandas as pd
+from pandas import DataFrame
 
 class DOMNotFoundException(Exception):
     """
@@ -32,7 +32,7 @@ class JobReader(IReader):
         # This is where constants defined are loaded and helpful for searching the 
         # required data from the pages
         if Platform is not None:
-            self.Constants = importlib.import_module('ReaderImplementation.Constants.{}ReaderConstants'.format(Platform))
+            self.Constants = importlib.import_module('ReaderImplementation.Constants.%sReaderConstants' % Platform)
         else:
             self.Constants = importlib.import_module('ReaderImplementation.Constants.LinkedInReaderConstants')
 
@@ -47,9 +47,7 @@ class JobReader(IReader):
                             "DatePosted":      self.Constants.JOB_SEARCH_TIME_POSTED, 
                             "NumberOfPages":   self.Constants.JOB_SEARCH_PAGE_KEY
                             }
-        self.UserTags = {}
-        self.UserClass = {}
-        self.UserAttr = {}
+        self.UserTags, self.UserClass, self.UserAttr = {}, {}, {}
         self.QueryKeyLen = len(self.QueryParams)
         self.PageMultiplier = self.Constants.JOB_SEARCH_PAGE_MULTIPLIER
 
@@ -63,16 +61,18 @@ class JobReader(IReader):
         if not(isinstance(self.SearchURL, str)):
             raise ValueError('Search URL is not defined for constructing search URL')
 
-        QueryURL = self.SearchURL + '?'
+        QueryURL = '%s?' % self.SearchURL
+
         for QueryKey, QueryValue in KeywordParams.items():
             if QueryKey not in self.QueryParams:
-                print('Key {} not found in list of keys'.format(QueryKey))
+                print('Key %s not found in list of keys' % QueryKey)
+
             elif self.QueryParams[QueryKey] is not None:
                 if QueryKey == 'NumberOfPages':
                     QueryValue = PageNumber * self.PageMultiplier
 
-                QueryURL += '{}={}'.format(self.QueryParams[QueryKey], QueryValue)
-                QueryURL += '&'
+                QueryURL += '%s=%s&' % (self.QueryParams[QueryKey], QueryValue)
+
         return QueryURL
 
     def SetTagsFromUser(self, UserAttr, TagName, TagClass=None, DOMAttr=None):
@@ -96,7 +96,6 @@ class JobReader(IReader):
         """
         # Sometimes the link is the main Job post DOM element,
         # to check whether that is the case as per the constants defined.
-        LinkDOM = None
         if JobPostDOM is not None:
             ClassName = JobPostDOM['class'] if JobPostDOM.has_attr('class') else None
 
@@ -159,11 +158,11 @@ class JobReader(IReader):
         :returns Data if Attr is defined in UserAttr and it exists in DOM, else 
         returns None
         """
-        UserTags = self.UserTags[Attr] if Attr in UserTags else None
-        UserClass = self.UserClass[Attr] if Attr in UserTags else None
-        UserAttr = self.UserAttr[Attr] if Attr in UserTags else DOMAttr
+        UserTags = self.UserTags[Attr] if Attr in self.UserTags else None
+        UserClass = self.UserClass[Attr] if Attr in self.UserTags else None
+        UserAttr = self.UserAttr[Attr] if Attr in self.UserTags else DOMAttr
         return self.GetDataFromJobPostDOM(JobPostDOM,
-                                          UserTag,
+                                          UserTags,
                                           UserClass,
                                           UserAttr)
 
@@ -180,22 +179,14 @@ class JobReader(IReader):
         """
         JobCustomData = None
         if isinstance(CustomDataDOMTag, str):
-            if CustomDataDOMClass is None:
-                JobCustomData = JobPostDOM.find(CustomDataDOMTag)
-            elif isinstance(CustomDataDOMClass, str):
-                JobCustomData = JobPostDOM.find(CustomDataDOMTag, class_=CustomDataDOMClass)
-            else:
-                raise TypeError('CustomDataDOMClass should either\
-                                be none or str, not' + type(CustomDataDOMClass))
+            JobCustomData = JobPostDOM.find(CustomDataDOMTag, class_=CustomDataDOMClass) \
+                if isinstance(CustomDataDOMClass, str) else JobPostDOM.find(CustomDataDOMTag)
 
             if JobCustomData is not None:
                 if isinstance(CustomDataDOMAttribute, str):
                     return JobCustomData[CustomDataDOMAttribute].strip()
-                elif CustomDataDOMAttribute is None:
-                    return JobCustomData.text.strip()
                 else:
-                    raise TypeError('CustomDataDOMAttribute should either\
-                                     be none (for innerText) or str, not' + type(CustomDataDOMAttribute))
+                    return JobCustomData.text.strip()
         return None
 
     def Columns(self, ToDisplay):
@@ -206,7 +197,7 @@ class JobReader(IReader):
         if ToDisplay is not None:
             ToDisplay = set(ToDisplay)
             for Attr in ToDisplay:
-                if Attr not in self.ToDisplay:
+                if Attr in self.ToDisplay:
                     ToDisplay.remove(Attr)
 
             columns += list(ToDisplay)
@@ -231,7 +222,7 @@ class JobReader(IReader):
             else:
                 raise DOMNotFoundException('No DOM element related to search list found')
 
-        return pd.DataFrame(columns=ToDisplay)
+        return DataFrame(columns=ToDisplay)
 
     def ListAllAvailableCompaniesInfo(self, AllJobPostDOMList, ToDisplay=None):
         """
@@ -241,31 +232,28 @@ class JobReader(IReader):
         """
         # To be replaced with dataframe or np array.
         # Useful for people performing data analytics
-        dataframe = pd.DataFrame(columns=ToDisplay)
+        dataframe = DataFrame(columns=ToDisplay)
 
-        JobDictionary = {}
-        index = 1
         for JobPostDOM in AllJobPostDOMList:
             Link = self.GetLinkOfJobPostFromJobPostDOM(JobPostDOM)
-            # print(JobPostDOM)
             # Check if domain name is given or not
-            if Link is not None and not(Link.startswith('https://')) and not(Link.startswith('http://')):
-                Link = self.DomainName + Link
+            Link = '%s%s' % (self.DomainName, Link) if Link is not None and not(Link.startswith('https://')) else Link
             # to check whether if the link has relative path or absolute path
             if Link is not None:
-                Dictionary =  {
+                Dictionary = {
                         'JobLink': Link,
                         'JobTitle': self.GetJobTitleFromJobPostDOM(JobPostDOM), 
                         'CompanyName': self.GetCompanyFromJobPostDOM(JobPostDOM), 
                         'TimePosted': self.GetPostedTimeFromJobPostDOM(JobPostDOM),
                         'JobLocation': self.GetJobLocationFromJobPostDOM(JobPostDOM)}
 
-                for DisplayAttr in ToDisplay:
-                    if DisplayAttr not in self.ToDisplay:
-                        Dictionary[DisplayAttr] = self.GetDataFromJobPostDOM(JobPostDOM,
-                                                                             self.UserTags[DisplayAttr],
-                                                                             self.UserClass[DisplayAttr],
-                                                                             self.UserAttr[DisplayAttr])
+                if ToDisplay is not None:
+                    for DisplayAttr in ToDisplay:
+                        if DisplayAttr not in self.ToDisplay:
+                            Dictionary[DisplayAttr] = self.GetDataFromJobPostDOM(JobPostDOM,
+                                                                                self.UserTags[DisplayAttr],
+                                                                                self.UserClass[DisplayAttr],
+                                                                                self.UserAttr[DisplayAttr])
 
                 dataframe = dataframe.append(Dictionary, ignore_index=True)
 

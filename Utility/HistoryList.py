@@ -30,7 +30,7 @@ class HistoryList:
         :returns this
         """
         # trivial case: if list is empty
-        if self.Head == None and self.Tail == None:
+        if self.Head is None and self.Tail is None:
             self.Head = self.Tail = Node(data)
         # else add to the Tail of the list
         else:
@@ -46,7 +46,7 @@ class HistoryList:
             NewData = Node(data)
             self.Tail.NextData = NewData
             NewData.PreviousData = self.Tail
-            self.Tail = newData
+            self.Tail = NewData
             self.Size += 1
 
         return self
@@ -57,11 +57,10 @@ class HistoryList:
         """
         Traverse = self.Tail
         index = 0
-        display = "Recent History Size: {}\n".format(self.Size)
+        display = "Recent History Size: %d\n" % self.Size
         while Traverse is not None:
-            display += '{}:\n:::\n[\n{}\n]\n:::\n'.format(index, Traverse.data.__str__())
-            Traverse = Traverse.PreviousData
-            index += 1
+            display += '%d:\n:::\n[\n%s\n]\n:::\n' % (index, Traverse.data.__str__())
+            Traverse, index = Traverse.PreviousData, index + 1
         return display
 
     def RetrieveRecentNthQuery(self, n):
@@ -74,8 +73,7 @@ class HistoryList:
             print('Recent nth query value n: {} exceeds history size: {}'.format(n, self.Size))
             return None
         else:
-            Traverse = self.Tail
-            n = n - 1
+            Traverse, n = self.Tail, n - 1
             while n > 0:
                 Traverse = Traverse.NextData
             return Traverse.Data
