@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 from bs4 import BeautifulSoup
 import importlib
-import re
 from ReaderInterfaces.IReader import IReader
 from ReaderImplementation.Constants.LinkedInReaderConstants import *
 from pandas import DataFrame
@@ -184,7 +183,7 @@ class JobReader(IReader):
 
             if JobCustomData is not None:
                 if isinstance(CustomDataDOMAttribute, str):
-                    return JobCustomData[CustomDataDOMAttribute].strip()
+                    return JobCustomData[CustomDataDOMAttribute]
                 else:
                     return JobCustomData.text.strip()
         return None
@@ -236,10 +235,10 @@ class JobReader(IReader):
 
         for JobPostDOM in AllJobPostDOMList:
             Link = self.GetLinkOfJobPostFromJobPostDOM(JobPostDOM)
-            # Check if domain name is given or not
-            Link = '%s%s' % (self.DomainName, Link) if Link is not None and not(Link.startswith('https://')) else Link
             # to check whether if the link has relative path or absolute path
             if Link is not None:
+                # Check if domain name is given or not
+                Link = '%s%s' % (self.DomainName, Link) if Link is not None and not(Link.startswith('https://')) else Link
                 Dictionary = {
                         'JobLink': Link,
                         'JobTitle': self.GetJobTitleFromJobPostDOM(JobPostDOM), 
